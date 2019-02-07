@@ -6,8 +6,10 @@ from datetime import datetime, timezone
 import urllib
 import json
 
-from sqlalchemy import Table, Column, PrimaryKeyConstraint, LargeBinary
-from sqlalchemy import Integer, String, MetaData, ForeignKey
+from sqlalchemy import Table, Column, PrimaryKeyConstraint, Binary as sqla_binary
+from sqlalchemy import Integer, String, MetaData
+from sqlalchemy.dialects.mysql import VARBINARY as mysql_binary
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import func, and_, or_
 import dateutil.parser
 
@@ -125,6 +127,7 @@ class PatreonMember:
 class Patreon:
 	def __init__(self, engine, db_prefix='', install=False):
 		self.engine = engine
+		self.engine_session = sessionmaker(bind=self.engine)()
 
 		self.db_prefix = db_prefix
 
@@ -145,16 +148,16 @@ class Patreon:
 
 		default_bytes = 0b0 * 16
 
+		if 'mysql' == self.engine_session.bind.dialect.name:
+			Binary = mysql_binary
+		else:
+			Binary = sqla_binary
+
 		# clients tables
 		self.clients = Table(
 			self.db_prefix + 'patreon_clients',
 			metadata,
-			Column(
-				'id',
-				LargeBinary(16),
-				primary_key=True,
-				default=default_bytes,
-			),
+			Column('id', Binary(16), default=default_bytes),
 			Column('creation_time', Integer, default=0),
 			Column('client_id', String(self.client_id_length), default=''),
 			Column(
@@ -179,56 +182,33 @@ class Patreon:
 				default='',
 			),
 			#TODO is this always a number?
-			Column(
-				'campaign_id',
-				Integer,
-				default=0,
-			),
+			Column('campaign_id', Integer, default=0),
 			Column(
 				'creation_name',
 				String(self.creation_name_length),
 				default='',
 			),
+			PrimaryKeyConstraint('id'),
 		)
 		# tiers tables
 		self.tiers = Table(
 			self.db_prefix + 'patreon_tiers',
 			metadata,
 			#TODO is this always a number?
-			Column('id', Integer, primary_key=True, default=0),
-			Column(
-				'client_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_clients.id'),
-				primary_key=True,
-			),
-			Column(
-				'campaign_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_clients.campaign_id')
-			),
+			Column('id', Integer, default=0),
+			Column('client_id', Binary(16), default=default_bytes),
+			Column('campaign_id', Integer, default=0),
 			Column('title', String(self.tier_title_length), default=''),
 			Column('amount_cents', Integer, default=0),
 			Column('unpublished', Integer, default=0),
+			PrimaryKeyConstraint('id', 'client_id'),
 		)
 		self.tier_permissions = Table(
 			self.db_prefix + 'patreon_tier_permissionss',
 			metadata,
-			Column(
-				'client_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_clients.id'),
-			),
-			Column(
-				'campaign_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_clients.campaign_id')
-			),
-			Column(
-				'tier_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_tiers.id')
-			),
+			Column('client_id', Binary(16), default=default_bytes),
+			Column('campaign_id', Integer, default=0),
+			Column('tier_id', Integer, default=0),
 			Column('length', Integer, default=0),
 			Column('shareable', Integer, default=0),
 			Column('scope', String(self.scope_length), default=''),
@@ -240,40 +220,24 @@ class Patreon:
 			self.db_prefix + 'patreon_benefits',
 			metadata,
 			#TODO is this always a number?
-			Column('id', Integer, primary_key=True, default=0),
-			Column(
-				'client_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_clients.id'),
-				primary_key=True,
-			),
-			Column(
-				'campaign_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_clients.campaign_id')
-			),
+			Column('id', Integer, default=0),
+			Column('client_id', Binary(16), default=default_bytes),
+			Column('campaign_id', Integer, default=0),
 			Column('title', String(self.benefit_title_length), default=''),
-			Column('rule_type', String(self.benefit_rule_type_length), default=''),
+			Column(
+				'rule_type',
+				String(self.benefit_rule_type_length),
+				default='',
+			),
 			Column('next_deliverable_due_time', Integer, default=0),
+			PrimaryKeyConstraint('id', 'client_id'),
 		)
 		self.benefit_permissions = Table(
 			self.db_prefix + 'patreon_benefit_permissionss',
 			metadata,
-			Column(
-				'client_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_clients.id'),
-			),
-			Column(
-				'campaign_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_clients.campaign_id')
-			),
-			Column(
-				'benefit_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_benefits.id')
-			),
+			Column('client_id', Binary(16), default=default_bytes),
+			Column('campaign_id', Integer, default=0),
+			Column('benefit_id', Integer, default=0),
 			Column('length', Integer, default=0),
 			Column('shareable', Integer, default=0),
 			Column('scope', String(self.scope_length), default=''),
@@ -284,28 +248,10 @@ class Patreon:
 		self.members = Table(
 			self.db_prefix + 'patreon_members',
 			metadata,
-			Column(
-				'id',
-				LargeBinary(16),
-				primary_key=True,
-				default=default_bytes,
-			),
-			Column(
-				'client_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_clients.id'),
-				primary_key=True,
-			),
-			Column(
-				'campaign_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_clients.campaign_id')
-			),
-			Column(
-				'tier_id',
-				None,
-				ForeignKey(self.db_prefix + 'patreon_tiers.id')
-			),
+			Column('id', Binary(16), default=default_bytes),
+			Column('client_id', Binary(16), default=default_bytes),
+			Column('campaign_id', Integer, default=0),
+			Column('tier_id', Integer, default=0),
 			#TODO is this always a number?
 			Column('user_id', Integer, default=0),
 			Column('amount_cents', Integer, default=0),
@@ -324,17 +270,21 @@ class Patreon:
 			#TODO but for now store them directly on the member record
 			#TODO and eat any minor redundancy
 			Column('name', String(self.member_name_length), default=''),
+			PrimaryKeyConstraint('id', 'client_id'),
 		)
 
 		self.connection = self.engine.connect()
 
 		if install:
-			table_exists = self.engine.dialect.has_table(
-				self.engine,
-				self.db_prefix + 'patreon_clients'
-			)
-			if not table_exists:
-				metadata.create_all(self.engine)
+			for table in [
+					self.clients,
+					self.tiers,
+					self.tier_permissions,
+					self.benefits,
+					self.benefit_permissions,
+					self.members,
+				]:
+				table.create(bind=self.engine, checkfirst=True)
 
 	def uninstall(self):
 		for table in [
