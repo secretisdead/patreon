@@ -204,7 +204,7 @@ class Patreon:
 			PrimaryKeyConstraint('id', 'client_id'),
 		)
 		self.tier_permissions = Table(
-			self.db_prefix + 'patreon_tier_permissionss',
+			self.db_prefix + 'patreon_tier_permissions',
 			metadata,
 			Column('client_id', Binary(16), default=default_bytes),
 			Column('campaign_id', Integer, default=0),
@@ -233,7 +233,7 @@ class Patreon:
 			PrimaryKeyConstraint('id', 'client_id'),
 		)
 		self.benefit_permissions = Table(
-			self.db_prefix + 'patreon_benefit_permissionss',
+			self.db_prefix + 'patreon_benefit_permissions',
 			metadata,
 			Column('client_id', Binary(16), default=default_bytes),
 			Column('campaign_id', Integer, default=0),
