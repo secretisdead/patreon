@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import urllib
 import json
 
-from sqlalchemy import Table, Column, PrimaryKeyConstraint, Binary as sqla_binary
+from sqlalchemy import Table, Column, PrimaryKeyConstraint, LargeBinary as sqla_binary
 from sqlalchemy import Integer, String, MetaData
 from sqlalchemy.dialects.mysql import VARBINARY as mysql_binary
 from sqlalchemy.orm import sessionmaker
